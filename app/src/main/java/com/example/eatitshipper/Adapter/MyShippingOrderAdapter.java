@@ -2,6 +2,7 @@ package com.example.eatitshipper.Adapter;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -16,7 +17,9 @@ import com.bumptech.glide.Glide;
 import com.example.eatitshipper.Common.Common;
 import com.example.eatitshipper.Model.ShippingOrderModel;
 import com.example.eatitshipper.R;
+import com.example.eatitshipper.ShippingActivity;
 import com.google.android.material.button.MaterialButton;
+import com.google.gson.Gson;
 
 import org.greenrobot.eventbus.EventBus;
 
@@ -26,6 +29,7 @@ import java.util.List;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.Unbinder;
+import io.paperdb.Paper;
 
 public class MyShippingOrderAdapter extends RecyclerView.Adapter<MyShippingOrderAdapter.MyViewHolder> {
 
@@ -37,6 +41,7 @@ public class MyShippingOrderAdapter extends RecyclerView.Adapter<MyShippingOrder
         this.context = context;
         this.shippingOrderModelList = shippingOrderModelList;
         simpleDateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
+        Paper.init(context);
     }
 
     @NonNull
@@ -60,6 +65,13 @@ public class MyShippingOrderAdapter extends RecyclerView.Adapter<MyShippingOrder
         if (shippingOrderModelList.get(position).isStartTrip()) {
             holder.btn_ship_now.setEnabled(false);
         }
+
+        //event
+        holder.btn_ship_now.setOnClickListener(view -> {
+
+            Paper.book().write(Common.SHIPPING_ORDER_DATA, new Gson().toJson(shippingOrderModelList.get(position)));
+            context.startActivity(new Intent(context, ShippingActivity.class));
+        });
     }
 
     @Override
