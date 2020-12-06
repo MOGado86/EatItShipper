@@ -34,6 +34,7 @@ public class Common {
     public static final String NOT1_TITLE = "title";
     public static final String NOT1_CONTENT = "content";
     public static final String TOKEN_REF = "Tokens";
+    public static final String SHIPPING_ORDER_REF = "ShippingOrder";
 
     public static ShipperUserModel currentShipperUser;
 
