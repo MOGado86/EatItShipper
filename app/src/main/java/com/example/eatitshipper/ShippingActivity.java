@@ -11,6 +11,7 @@ import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
+import android.location.Location;
 import android.os.Bundle;
 import android.os.Looper;
 import android.text.TextUtils;
@@ -21,6 +22,8 @@ import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
 import com.example.eatitshipper.Common.Common;
+import com.example.eatitshipper.Common.LatLngInterpolator;
+import com.example.eatitshipper.Common.MarkerAnimation;
 import com.example.eatitshipper.Model.ShippingOrderModel;
 import com.firebase.ui.auth.data.model.Resource;
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -62,6 +65,9 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
 
     private Marker shipperMarker;
     private ShippingOrderModel shippingOrderModel;
+
+    private boolean isInit = false;
+    private Location previousLocation = null;
 
     @SuppressLint("NonConstantResourceId")
     @BindView(R.id.txt_order_number)
@@ -175,10 +181,24 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
                     Bitmap resized = Bitmap.createScaledBitmap(bitmapDrawable.getBitmap(), width, height, false);
                     shipperMarker = mMap.addMarker(new MarkerOptions().
                             icon(BitmapDescriptorFactory.fromBitmap(resized)).position(locationShipper).title("You"));
+
+                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(locationShipper, 15));
                 } else {
                     shipperMarker.setPosition(locationShipper);
                 }
-                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(locationShipper, 15));
+                if (isInit && previousLocation != null) {
+                    LatLng previousLocationLatLng = new LatLng(previousLocation.getLatitude(), previousLocation.getLongitude());
+                    MarkerAnimation.animateMarkerToGB(shipperMarker, locationShipper, new LatLngInterpolator.Spherical());
+                    shipperMarker.setRotation(Common.getBearing(previousLocationLatLng, locationShipper));
+                    mMap.animateCamera(CameraUpdateFactory.newLatLng(locationShipper));
+                    previousLocation = locationResult.getLastLocation();
+
+                }
+
+                if (!isInit) {
+                    isInit = true;
+                    previousLocation = locationResult.getLastLocation();
+                }
 
             }
         };
