@@ -2,6 +2,7 @@ package com.example.eatitshipper;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.View;
 import android.view.Menu;
 import android.widget.Toast;
@@ -20,6 +21,8 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
+import io.paperdb.Paper;
+
 public class HomeActivity extends AppCompatActivity {
 
     private AppBarConfiguration mAppBarConfiguration;
@@ -34,6 +37,7 @@ public class HomeActivity extends AppCompatActivity {
 
         updateToken();
 
+        checkStartTrip();
 
         DrawerLayout drawer = findViewById(R.id.drawer_layout);
         NavigationView navigationView = findViewById(R.id.nav_view);
@@ -46,6 +50,12 @@ public class HomeActivity extends AppCompatActivity {
         NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment);
         NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
         NavigationUI.setupWithNavController(navigationView, navController);
+    }
+
+    private void checkStartTrip() {
+        Paper.init(this);
+        if (!TextUtils.isEmpty(Paper.book().read(Common.TRIP_START)))
+            startActivity(new Intent(this, ShippingActivity.class));
     }
 
     private void updateToken() {

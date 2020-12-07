@@ -1,5 +1,6 @@
 package com.example.eatitshipper;
 
+import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
@@ -19,6 +20,7 @@ import android.os.Looper;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.animation.LinearInterpolator;
+import android.widget.AutoCompleteTextView;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -31,6 +33,7 @@ import com.example.eatitshipper.Model.ShippingOrderModel;
 import com.example.eatitshipper.Remote.IGoogleApi;
 import com.example.eatitshipper.Remote.RetroFitClient;
 import com.firebase.ui.auth.data.model.Resource;
+import com.google.android.gms.common.api.Status;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
@@ -49,6 +52,12 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.android.gms.maps.model.SquareCap;
+import com.google.android.libraries.places.api.Places;
+import com.google.android.libraries.places.api.model.Place;
+import com.google.android.libraries.places.api.net.PlacesClient;
+import com.google.android.libraries.places.widget.AutocompleteFragment;
+import com.google.android.libraries.places.widget.AutocompleteSupportFragment;
+import com.google.android.libraries.places.widget.listener.PlaceSelectionListener;
 import com.google.android.material.button.MaterialButton;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -64,10 +73,12 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.List;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
+import butterknife.OnClick;
 import io.paperdb.Paper;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.CompositeDisposable;
@@ -124,12 +135,28 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
     @BindView(R.id.img_food_image)
     ImageView img_food_image;
 
+    AutocompleteSupportFragment places_fragment;
+    PlacesClient placesClient;
+    List<Place.Field> placeFields = Arrays.asList(Place.Field.ID, Place.Field.NAME, Place.Field.ADDRESS, Place.Field.LAT_LNG);
+
+    @SuppressLint("NonConstantResourceId")
+    @OnClick(R.id.btn_start_trip)
+    void onStartTripClick() {
+        String data = Paper.book().read(Common.SHIPPING_ORDER_DATA);
+        Paper.book().write(Common.TRIP_START, data);
+        btn_start_trip.setEnabled(false);
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_shipping);
 
         iGoogleApi = RetroFitClient.getInstance().create(IGoogleApi.class);
+
+        initPlaces();
+        setupAutoCompletePlaces();
+
         ButterKnife.bind(this);
         buildLocationRequest();
         buildLocationCallback();
@@ -142,7 +169,7 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
                         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
                         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                                 .findFragmentById(R.id.map);
-                        mapFragment.getMapAsync(ShippingActivity.this::onMapReady);
+                        mapFragment.getMapAsync(ShippingActivity.this);
 
                         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(ShippingActivity.this);
                         if (ActivityCompat.checkSelfPermission(ShippingActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(ShippingActivity.this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -167,9 +194,40 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
 
     }
 
+    private void setupAutoCompletePlaces() {
+        places_fragment = (AutocompleteSupportFragment) getSupportFragmentManager().findFragmentById(R.id.places_autocomplete_fragment);
+        places_fragment.setPlaceFields(placeFields);
+        places_fragment.setOnPlaceSelectedListener(new PlaceSelectionListener() {
+            @Override
+            public void onPlaceSelected(@NonNull Place place) {
+                Toast.makeText(ShippingActivity.this, new StringBuilder(place.getName()).append("-")
+                        .append(place.getLatLng().toString()), Toast.LENGTH_SHORT).show();
+
+            }
+
+            @Override
+            public void onError(@NonNull Status status) {
+                Log.d("PLACES API", "onError: " + status.getStatusMessage());
+                Toast.makeText(ShippingActivity.this, ""+status.getStatusMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void initPlaces() {
+        Places.initialize(this, getString(R.string.google_maps_key));
+        placesClient = Places.createClient(this);
+    }
+
     private void setShippingOrder() {
         Paper.init(this);
-        String data = Paper.book().read(Common.SHIPPING_ORDER_DATA);
+        String data;
+        if (TextUtils.isEmpty(Paper.book().read(Common.TRIP_START))) {
+            btn_start_trip.setEnabled(true);
+            data = Paper.book().read(Common.SHIPPING_ORDER_DATA);
+        } else {
+            btn_start_trip.setEnabled(false);
+            data = Paper.book().read(Common.TRIP_START);
+        }
 
         if (!TextUtils.isEmpty(data)) {
             shippingOrderModel = new Gson().fromJson(data, new TypeToken<ShippingOrderModel>() {
@@ -220,14 +278,13 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
                 }*/
                 if (isInit && previousLocation != null) {
 
-                    String from = new StringBuilder().append(previousLocation.getLatitude())
-                            .append(",")
-                            .append(previousLocation.getLongitude()).toString();
+                    String from = previousLocation.getLatitude() +
+                            "," +
+                            previousLocation.getLongitude();
 
-                    String to = new StringBuilder().append(locationShipper.latitude)
-                            .append(",")
-                            .append(locationShipper.longitude)
-                            .toString();
+                    String to = locationShipper.latitude +
+                            "," +
+                            locationShipper.longitude;
 
 
                     moveMarkerAnimation(shipperMarker, from, to);
@@ -307,20 +364,17 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
                                 ValueAnimator valueAnimator = ValueAnimator.ofInt(0, 1);
                                 valueAnimator.setDuration(1500);
                                 valueAnimator.setInterpolator(new LinearInterpolator());
-                                valueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-                                    @Override
-                                    public void onAnimationUpdate(ValueAnimator valueAnimator) {
-                                        v = valueAnimator.getAnimatedFraction();
-                                        lng = v * end.longitude + (1 - v) * start.longitude;
-                                        lat = v * end.latitude + (1 - v) * start.latitude;
+                                valueAnimator.addUpdateListener(valueAnimator1 -> {
+                                    v = valueAnimator1.getAnimatedFraction();
+                                    lng = v * end.longitude + (1 - v) * start.longitude;
+                                    lat = v * end.latitude + (1 - v) * start.latitude;
 
-                                        LatLng newPos = new LatLng(lat, lng);
-                                        marker.setPosition(newPos);
-                                        marker.setAnchor(0.5f, 0.5f);
-                                        marker.setRotation(Common.getBearing(start, newPos));
+                                    LatLng newPos = new LatLng(lat, lng);
+                                    marker.setPosition(newPos);
+                                    marker.setAnchor(0.5f, 0.5f);
+                                    marker.setRotation(Common.getBearing(start, newPos));
 
-                                        mMap.animateCamera(CameraUpdateFactory.newLatLng(marker.getPosition()));
-                                    }
+                                    mMap.animateCamera(CameraUpdateFactory.newLatLng(marker.getPosition()));
                                 });
                                 valueAnimator.start();
                                 if (index < polylineList.size() - 2) //reach destination

@@ -35,7 +35,7 @@
             android:id="@+id/expandable_layout"
             app:el_parallax="0.5"
             app:el_duration="1000"
-            app:el_expanded="false">
+            app:el_expanded="true">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -127,7 +127,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:id="@+id/btn_start_trip"
-                                android:layout_marginLeft="8dp"
+                                android:layout_marginStart="8dp"
                                 android:text="Start Trip"
                                 android:textSize="12sp"
                                 android:layout_weight="1"/>
@@ -152,7 +152,7 @@
                                 android:backgroundTint="@color/cardview_dark_background"
                                 android:textColor="@android:color/white"
                                 android:id="@+id/btn_done"
-                                android:layout_marginLeft="8dp"
+                                android:layout_marginStart="8dp"
                                 android:text="Done"
                                 android:layout_weight="1"/>
 

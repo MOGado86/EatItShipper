@@ -40,6 +40,7 @@ public class Common {
     public static final String TOKEN_REF = "Tokens";
     public static final String SHIPPING_ORDER_REF = "ShippingOrder";
     public static final String SHIPPING_ORDER_DATA = "ShippingData";
+    public static final String TRIP_START = "Trip";
 
     public static ShipperUserModel currentShipperUser;
 
