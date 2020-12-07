@@ -5,6 +5,7 @@ import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
 
 import android.Manifest;
+import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
@@ -13,9 +14,11 @@ import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
 import android.location.Location;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.animation.LinearInterpolator;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -25,6 +28,8 @@ import com.example.eatitshipper.Common.Common;
 import com.example.eatitshipper.Common.LatLngInterpolator;
 import com.example.eatitshipper.Common.MarkerAnimation;
 import com.example.eatitshipper.Model.ShippingOrderModel;
+import com.example.eatitshipper.Remote.IGoogleApi;
+import com.example.eatitshipper.Remote.RetroFitClient;
 import com.firebase.ui.auth.data.model.Resource;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
@@ -36,12 +41,17 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.JointType;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MapStyleOptions;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
+import com.google.android.gms.maps.model.SquareCap;
 import com.google.android.material.button.MaterialButton;
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 import com.karumi.dexter.Dexter;
 import com.karumi.dexter.PermissionToken;
@@ -50,11 +60,19 @@ import com.karumi.dexter.listener.PermissionGrantedResponse;
 import com.karumi.dexter.listener.PermissionRequest;
 import com.karumi.dexter.listener.single.PermissionListener;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.text.SimpleDateFormat;
+import java.util.List;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import io.paperdb.Paper;
+import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.disposables.CompositeDisposable;
+import io.reactivex.functions.Consumer;
+import io.reactivex.schedulers.Schedulers;
 
 public class ShippingActivity extends FragmentActivity implements OnMapReadyCallback {
 
@@ -68,6 +86,17 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
 
     private boolean isInit = false;
     private Location previousLocation = null;
+
+    private Handler handler;
+    private int index, next;
+    private LatLng start, end;
+    private float v;
+    private double lat, lng;
+    private Polyline blackPolyline, greyPolyline;
+    private PolylineOptions polylineOptions, blackPolylineOptions;
+    private List<LatLng> polylineList;
+    private IGoogleApi iGoogleApi;
+    private CompositeDisposable compositeDisposable = new CompositeDisposable();
 
     @SuppressLint("NonConstantResourceId")
     @BindView(R.id.txt_order_number)
@@ -100,6 +129,7 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_shipping);
 
+        iGoogleApi = RetroFitClient.getInstance().create(IGoogleApi.class);
         ButterKnife.bind(this);
         buildLocationRequest();
         buildLocationCallback();
@@ -142,7 +172,8 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
         String data = Paper.book().read(Common.SHIPPING_ORDER_DATA);
 
         if (!TextUtils.isEmpty(data)) {
-            shippingOrderModel = new Gson().fromJson(data, new TypeToken<ShippingOrderModel>(){}.getType());
+            shippingOrderModel = new Gson().fromJson(data, new TypeToken<ShippingOrderModel>() {
+            }.getType());
             if (shippingOrderModel != null) {
                 Common.setSpanStringColor("Name : ", shippingOrderModel.getOrderModel().getUserName(),
                         txt_name, Color.parseColor("#333639"));
@@ -177,20 +208,29 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
                 if (shipperMarker == null) {
                     int width, height;
                     height = width = 80;
-                    BitmapDrawable bitmapDrawable = (BitmapDrawable) ContextCompat.getDrawable(ShippingActivity.this, R.drawable.shipper);
+                    BitmapDrawable bitmapDrawable = (BitmapDrawable) ContextCompat.getDrawable(ShippingActivity.this, R.drawable.shippernew);
                     Bitmap resized = Bitmap.createScaledBitmap(bitmapDrawable.getBitmap(), width, height, false);
                     shipperMarker = mMap.addMarker(new MarkerOptions().
                             icon(BitmapDescriptorFactory.fromBitmap(resized)).position(locationShipper).title("You"));
 
-                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(locationShipper, 15));
-                } else {
-                    shipperMarker.setPosition(locationShipper);
+                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(locationShipper, 18));
                 }
+                /*else {
+                    shipperMarker.setPosition(locationShipper);
+                }*/
                 if (isInit && previousLocation != null) {
-                    LatLng previousLocationLatLng = new LatLng(previousLocation.getLatitude(), previousLocation.getLongitude());
-                    MarkerAnimation.animateMarkerToGB(shipperMarker, locationShipper, new LatLngInterpolator.Spherical());
-                    shipperMarker.setRotation(Common.getBearing(previousLocationLatLng, locationShipper));
-                    mMap.animateCamera(CameraUpdateFactory.newLatLng(locationShipper));
+
+                    String from = new StringBuilder().append(previousLocation.getLatitude())
+                            .append(",")
+                            .append(previousLocation.getLongitude()).toString();
+
+                    String to = new StringBuilder().append(locationShipper.latitude)
+                            .append(",")
+                            .append(locationShipper.longitude)
+                            .toString();
+
+
+                    moveMarkerAnimation(shipperMarker, from, to);
                     previousLocation = locationResult.getLastLocation();
 
                 }
@@ -204,6 +244,98 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
         };
     }
 
+    private void moveMarkerAnimation(Marker marker, String from, String to) {
+
+        compositeDisposable.add(iGoogleApi.getDirections("driving", "less_driving",
+                from, to, getString(R.string.google_maps_key)).subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(returnResult -> {
+                    Log.d("API RETURN", "moveMarkerAnimation: " + returnResult);
+                    try {
+                        JSONObject jsonObject = new JSONObject(returnResult);
+                        JSONArray jsonArray = jsonObject.getJSONArray("routes");
+                        for (int i = 0; i < jsonArray.length(); i++) {
+                            JSONObject route = jsonArray.getJSONObject(i);
+                            JSONObject poly = route.getJSONObject("overview_polyline");
+                            String polyline = poly.getString("points");
+                            polylineList = Common.decodePoly(polyline);
+                        }
+
+                        polylineOptions = new PolylineOptions();
+                        polylineOptions.color(Color.GRAY);
+                        polylineOptions.width(5);
+                        polylineOptions.startCap(new SquareCap());
+                        polylineOptions.jointType(JointType.ROUND);
+                        polylineOptions.addAll(polylineList);
+                        greyPolyline = mMap.addPolyline(polylineOptions);
+
+                        blackPolylineOptions = new PolylineOptions();
+                        blackPolylineOptions.color(Color.BLACK);
+                        blackPolylineOptions.width(5);
+                        blackPolylineOptions.startCap(new SquareCap());
+                        blackPolylineOptions.jointType(JointType.ROUND);
+                        blackPolylineOptions.addAll(polylineList);
+                        greyPolyline = mMap.addPolyline(blackPolylineOptions);
+
+                        //Animator
+                        ValueAnimator polylineAnimator = ValueAnimator.ofInt(0, 100);
+                        polylineAnimator.setDuration(2000);
+                        polylineAnimator.setInterpolator(new LinearInterpolator());
+                        polylineAnimator.addUpdateListener(valueAnimator -> {
+                            List<LatLng> points = greyPolyline.getPoints();
+                            int percentValue = (int) valueAnimator.getAnimatedValue();
+                            int size = points.size();
+                            int newPoints = (int) (size * (percentValue / 100.0f));
+                            List<LatLng> p = points.subList(0, newPoints);
+                            blackPolyline.setPoints(p);
+                        });
+                        polylineAnimator.start();
+
+                        //Bike moving
+                        handler = new Handler();
+                        index = -1;
+                        next = 1;
+                        handler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (index < polylineList.size() - 1) {
+                                    index++;
+                                    next = index + 1;
+                                    start = polylineList.get(index);
+                                    end = polylineList.get(next);
+                                }
+                                ValueAnimator valueAnimator = ValueAnimator.ofInt(0, 1);
+                                valueAnimator.setDuration(1500);
+                                valueAnimator.setInterpolator(new LinearInterpolator());
+                                valueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                                    @Override
+                                    public void onAnimationUpdate(ValueAnimator valueAnimator) {
+                                        v = valueAnimator.getAnimatedFraction();
+                                        lng = v * end.longitude + (1 - v) * start.longitude;
+                                        lat = v * end.latitude + (1 - v) * start.latitude;
+
+                                        LatLng newPos = new LatLng(lat, lng);
+                                        marker.setPosition(newPos);
+                                        marker.setAnchor(0.5f, 0.5f);
+                                        marker.setRotation(Common.getBearing(start, newPos));
+
+                                        mMap.animateCamera(CameraUpdateFactory.newLatLng(marker.getPosition()));
+                                    }
+                                });
+                                valueAnimator.start();
+                                if (index < polylineList.size() - 2) //reach destination
+                                    handler.postDelayed(this, 1500);
+                            }
+                        }, 1500);
+                    } catch (Exception e) {
+                        Toast.makeText(this, "" + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                }, throwable -> {
+                    if (throwable != null)
+                        Toast.makeText(this, "" + throwable.getMessage(), Toast.LENGTH_SHORT).show();
+                }));
+    }
+
     private void buildLocationRequest() {
         locationRequest = new LocationRequest();
         locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
@@ -212,19 +344,9 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
         locationRequest.setSmallestDisplacement(20f);
     }
 
-    /**
-     * Manipulates the map once available.
-     * This callback is triggered when the map is ready to be used.
-     * This is where we can add markers or lines, add listeners or move the camera. In this case,
-     * we just add a marker near Sydney, Australia.
-     * If Google Play services is not installed on the device, the user will be prompted to install
-     * it inside the SupportMapFragment. This method will only be triggered once the user has
-     * installed Google Play services and returned to the app.
-     */
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
-
         mMap.getUiSettings().setZoomControlsEnabled(true);
 
         try {
@@ -241,6 +363,7 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
     @Override
     protected void onDestroy() {
         fusedLocationProviderClient.removeLocationUpdates(locationCallback);
+        compositeDisposable.clear();
         super.onDestroy();
 
     }
