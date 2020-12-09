@@ -52,6 +52,8 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.android.gms.maps.model.SquareCap;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.libraries.places.api.Places;
 import com.google.android.libraries.places.api.model.Place;
 import com.google.android.libraries.places.api.net.PlacesClient;
@@ -138,6 +140,7 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
     AutocompleteSupportFragment places_fragment;
     PlacesClient placesClient;
     List<Place.Field> placeFields = Arrays.asList(Place.Field.ID, Place.Field.NAME, Place.Field.ADDRESS, Place.Field.LAT_LNG);
+    private Polyline redPolyline;
 
     @SuppressLint("NonConstantResourceId")
     @OnClick(R.id.btn_start_trip)
@@ -145,6 +148,8 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
         String data = Paper.book().read(Common.SHIPPING_ORDER_DATA);
         Paper.book().write(Common.TRIP_START, data);
         btn_start_trip.setEnabled(false);
+
+        drawRoutes(data);
     }
 
     @Override
@@ -190,7 +195,6 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
                     }
                 }).check();
 
-        setShippingOrder();
 
     }
 
@@ -208,7 +212,7 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
             @Override
             public void onError(@NonNull Status status) {
                 Log.d("PLACES API", "onError: " + status.getStatusMessage());
-                Toast.makeText(ShippingActivity.this, ""+status.getStatusMessage(), Toast.LENGTH_SHORT).show();
+                Toast.makeText(ShippingActivity.this, "" + status.getStatusMessage(), Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -230,6 +234,8 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
         }
 
         if (!TextUtils.isEmpty(data)) {
+
+            drawRoutes(data);
             shippingOrderModel = new Gson().fromJson(data, new TypeToken<ShippingOrderModel>() {
             }.getType());
             if (shippingOrderModel != null) {
@@ -252,6 +258,56 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
 
         }
 
+    }
+
+    private void drawRoutes(String data) {
+        ShippingOrderModel shippingOrderModel = new Gson().fromJson(data, new TypeToken<ShippingOrderModel>() {
+        }.getType());
+
+        //Add Box
+        mMap.addMarker(new MarkerOptions().icon(BitmapDescriptorFactory.fromResource(R.drawable.box))
+                .title(shippingOrderModel.getOrderModel().getUserName())
+                .snippet(shippingOrderModel.getOrderModel().getShippingAddress())
+                .position(new LatLng(shippingOrderModel.getOrderModel().getLat(), shippingOrderModel.getOrderModel().getLng())));
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        fusedLocationProviderClient.getLastLocation().addOnFailureListener(e -> Toast.makeText(ShippingActivity.this, "" + e.getMessage(), Toast.LENGTH_SHORT).show())
+                .addOnSuccessListener(location -> {
+                    String to = shippingOrderModel.getOrderModel().getLat() +
+                            "," +
+                            shippingOrderModel.getOrderModel().getLng();
+                    String from = location.getLongitude() +
+                            "," +
+                            location.getLongitude();
+
+                    compositeDisposable.add(iGoogleApi.getDirections("driving", "less_driving",
+                            from, to, getString(R.string.google_maps_key)).subscribeOn(Schedulers.io())
+                            .observeOn(AndroidSchedulers.mainThread()).subscribe(s -> {
+
+                                try {
+                                    JSONObject jsonObject = new JSONObject(s);
+                                    JSONArray jsonArray = jsonObject.getJSONArray("routes");
+                                    for (int i = 0; i < jsonArray.length(); i++) {
+                                        JSONObject route = jsonArray.getJSONObject(i);
+                                        JSONObject poly = route.getJSONObject("overview_polyline");
+                                        String polyline = poly.getString("points");
+                                        polylineList = Common.decodePoly(polyline);
+                                    }
+
+                                    polylineOptions = new PolylineOptions();
+                                    polylineOptions.color(Color.RED);
+                                    polylineOptions.width(12);
+                                    polylineOptions.startCap(new SquareCap());
+                                    polylineOptions.jointType(JointType.ROUND);
+                                    polylineOptions.addAll(polylineList);
+                                    redPolyline = mMap.addPolyline(polylineOptions);
+                                } catch (Exception e) {
+                                    Toast.makeText(ShippingActivity.this, "" + e.getMessage(), Toast.LENGTH_SHORT).show();
+                                }
+                            }, throwable -> Toast.makeText(ShippingActivity.this, "" + throwable.getMessage(), Toast.LENGTH_SHORT).show()));
+                });
     }
 
     private void buildLocationCallback() {
@@ -401,6 +457,7 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
+        setShippingOrder();
         mMap.getUiSettings().setZoomControlsEnabled(true);
 
         try {
