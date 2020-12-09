@@ -30,6 +30,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import dmax.dialog.SpotsDialog;
+import io.paperdb.Paper;
 
 public class MainActivity extends AppCompatActivity {
     private static int APP_REQUEST_CODE = 7171;
@@ -59,6 +60,13 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         init();
+
+
+//        Delete data offline
+//        Paper.init(this);
+//        Paper.book().delete(Common.TRIP_START);
+//        Paper.book().delete(Common.SHIPPING_ORDER_DATA);
+
     }
 
     private void init() {

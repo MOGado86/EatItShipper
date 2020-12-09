@@ -51,8 +51,9 @@ public class HomeViewModel extends ViewModel implements IShippingOrderCallbackLi
         orderRef.addListenerForSingleValueEvent(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot snapshot) {
-                for (DataSnapshot itemSnapshot : snapshot.getChildren()) {
-                    ShippingOrderModel shippingOrderModel = itemSnapshot.getValue(ShippingOrderModel.class);
+                for (DataSnapshot orderSnapshot : snapshot.getChildren()) {
+                    ShippingOrderModel shippingOrderModel = orderSnapshot.getValue(ShippingOrderModel.class);
+                    shippingOrderModel.setKey(orderSnapshot.getKey());
                     tempList.add(shippingOrderModel);
                 }
                 listener.onShippingOrderLoadSuccess(tempList);

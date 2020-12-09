@@ -61,6 +61,7 @@ import com.google.android.libraries.places.widget.AutocompleteFragment;
 import com.google.android.libraries.places.widget.AutocompleteSupportFragment;
 import com.google.android.libraries.places.widget.listener.PlaceSelectionListener;
 import com.google.android.material.button.MaterialButton;
+import com.google.firebase.database.FirebaseDatabase;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
@@ -71,12 +72,16 @@ import com.karumi.dexter.listener.PermissionGrantedResponse;
 import com.karumi.dexter.listener.PermissionRequest;
 import com.karumi.dexter.listener.single.PermissionListener;
 
+import net.cachapa.expandablelayout.ExpandableLayout;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -134,8 +139,27 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
     @BindView(R.id.btn_done)
     MaterialButton btn_done;
     @SuppressLint("NonConstantResourceId")
+    @BindView(R.id.btn_show)
+    MaterialButton btn_show;
+    @SuppressLint("NonConstantResourceId")
+    @BindView(R.id.expandable_layout)
+    ExpandableLayout expandable_layout;
+    @SuppressLint("NonConstantResourceId")
     @BindView(R.id.img_food_image)
     ImageView img_food_image;
+    private Polyline yellowPolyline;
+
+
+    @OnClick(R.id.btn_show)
+    void onShowClick() {
+        if (expandable_layout.isExpanded()) {
+            btn_show.setText("SHOW");
+        }
+        else {
+            btn_show.setText("HIDE");
+        }
+        expandable_layout.toggle();
+    }
 
     AutocompleteSupportFragment places_fragment;
     PlacesClient placesClient;
@@ -204,8 +228,7 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
         places_fragment.setOnPlaceSelectedListener(new PlaceSelectionListener() {
             @Override
             public void onPlaceSelected(@NonNull Place place) {
-                Toast.makeText(ShippingActivity.this, new StringBuilder(place.getName()).append("-")
-                        .append(place.getLatLng().toString()), Toast.LENGTH_SHORT).show();
+               drawRoutes(place);
 
             }
 
@@ -217,52 +240,54 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
         });
     }
 
-    private void initPlaces() {
-        Places.initialize(this, getString(R.string.google_maps_key));
-        placesClient = Places.createClient(this);
-    }
+    private void drawRoutes(Place place) {
+        mMap.addMarker(new MarkerOptions().icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW))
+                .title(place.getName())
+                .snippet(place.getAddress())
+                .position(place.getLatLng()));
 
-    private void setShippingOrder() {
-        Paper.init(this);
-        String data;
-        if (TextUtils.isEmpty(Paper.book().read(Common.TRIP_START))) {
-            btn_start_trip.setEnabled(true);
-            data = Paper.book().read(Common.SHIPPING_ORDER_DATA);
-        } else {
-            btn_start_trip.setEnabled(false);
-            data = Paper.book().read(Common.TRIP_START);
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
         }
+        fusedLocationProviderClient.getLastLocation().addOnFailureListener(e -> Toast.makeText(ShippingActivity.this, "" + e.getMessage(), Toast.LENGTH_SHORT).show())
+                .addOnSuccessListener(location -> {
+                    String to = place.getLatLng().latitude +
+                            "," +
+                            place.getLatLng().longitude;
+                    String from = location.getLongitude() +
+                            "," +
+                            location.getLongitude();
 
-        if (!TextUtils.isEmpty(data)) {
+                    compositeDisposable.add(iGoogleApi.getDirections("driving", "less_driving",
+                            from, to, getString(R.string.google_maps_key)).subscribeOn(Schedulers.io())
+                            .observeOn(AndroidSchedulers.mainThread()).subscribe(s -> {
 
-            drawRoutes(data);
-            shippingOrderModel = new Gson().fromJson(data, new TypeToken<ShippingOrderModel>() {
-            }.getType());
-            if (shippingOrderModel != null) {
-                Common.setSpanStringColor("Name : ", shippingOrderModel.getOrderModel().getUserName(),
-                        txt_name, Color.parseColor("#333639"));
+                                try {
+                                    JSONObject jsonObject = new JSONObject(s);
+                                    JSONArray jsonArray = jsonObject.getJSONArray("routes");
+                                    for (int i = 0; i < jsonArray.length(); i++) {
+                                        JSONObject route = jsonArray.getJSONObject(i);
+                                        JSONObject poly = route.getJSONObject("overview_polyline");
+                                        String polyline = poly.getString("points");
+                                        polylineList = Common.decodePoly(polyline);
+                                    }
 
-                txt_date.setText(new StringBuilder().append(new SimpleDateFormat("dd-MM-yyyy HH:mm:ss").
-                        format(shippingOrderModel.getOrderModel().getCreateDate())));
-
-                Common.setSpanStringColor("No : ", shippingOrderModel.getOrderModel().getKey(),
-                        txt_order_number, Color.parseColor("#673ab7"));
-
-                Common.setSpanStringColor("Address : ", shippingOrderModel.getOrderModel().getShippingAddress(),
-                        txt_address, Color.parseColor("#795548"));
-
-                Glide.with(this)
-                        .load(shippingOrderModel.getOrderModel().getCartItemList().get(0).getFoodImg())
-                        .into(img_food_image);
-            }
-
-        }
-
+                                    polylineOptions = new PolylineOptions();
+                                    polylineOptions.color(Color.YELLOW);
+                                    polylineOptions.width(12);
+                                    polylineOptions.startCap(new SquareCap());
+                                    polylineOptions.jointType(JointType.ROUND);
+                                    polylineOptions.addAll(polylineList);
+                                    yellowPolyline = mMap.addPolyline(polylineOptions);
+                                } catch (Exception e) {
+                                    Toast.makeText(ShippingActivity.this, "" + e.getMessage(), Toast.LENGTH_SHORT).show();
+                                }
+                            }, throwable -> Toast.makeText(ShippingActivity.this, "" + throwable.getMessage(), Toast.LENGTH_SHORT).show()));
+                });
     }
 
     private void drawRoutes(String data) {
-        ShippingOrderModel shippingOrderModel = new Gson().fromJson(data, new TypeToken<ShippingOrderModel>() {
-        }.getType());
+        ShippingOrderModel shippingOrderModel = new Gson().fromJson(data, new TypeToken<ShippingOrderModel>() {}.getType());
 
         //Add Box
         mMap.addMarker(new MarkerOptions().icon(BitmapDescriptorFactory.fromResource(R.drawable.box))
@@ -310,6 +335,49 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
                 });
     }
 
+    private void initPlaces() {
+        Places.initialize(this, getString(R.string.google_maps_key));
+        placesClient = Places.createClient(this);
+    }
+
+    private void setShippingOrder() {
+        Paper.init(this);
+        String data;
+        if (TextUtils.isEmpty(Paper.book().read(Common.TRIP_START))) {
+            btn_start_trip.setEnabled(true);
+            data = Paper.book().read(Common.SHIPPING_ORDER_DATA);
+        } else {
+            btn_start_trip.setEnabled(false);
+            data = Paper.book().read(Common.TRIP_START);
+        }
+
+        if (!TextUtils.isEmpty(data)) {
+
+            drawRoutes(data);
+            shippingOrderModel = new Gson().fromJson(data, new TypeToken<ShippingOrderModel>() {
+            }.getType());
+            if (shippingOrderModel != null) {
+                Common.setSpanStringColor("Name : ", shippingOrderModel.getOrderModel().getUserName(),
+                        txt_name, Color.parseColor("#333639"));
+
+                txt_date.setText(new StringBuilder().append(new SimpleDateFormat("dd-MM-yyyy HH:mm:ss").
+                        format(shippingOrderModel.getOrderModel().getCreateDate())));
+
+                Common.setSpanStringColor("No : ", shippingOrderModel.getOrderModel().getKey(),
+                        txt_order_number, Color.parseColor("#673ab7"));
+
+                Common.setSpanStringColor("Address : ", shippingOrderModel.getOrderModel().getShippingAddress(),
+                        txt_address, Color.parseColor("#795548"));
+
+                Glide.with(this)
+                        .load(shippingOrderModel.getOrderModel().getCartItemList().get(0).getFoodImg())
+                        .into(img_food_image);
+            }
+
+        }
+
+    }
+
     private void buildLocationCallback() {
         locationCallback = new LocationCallback() {
             @Override
@@ -318,6 +386,8 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
                 // Add a marker in Sydney and move the camera
                 LatLng locationShipper = new LatLng(locationResult.getLastLocation().getLatitude(),
                         locationResult.getLastLocation().getLongitude());
+
+                updateLocation(locationResult.getLastLocation());
 
                 if (shipperMarker == null) {
                     int width, height;
@@ -355,6 +425,25 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
 
             }
         };
+    }
+
+    private void updateLocation(Location lastLocation) {
+        Map<String, Object> update_data = new HashMap<>();
+        update_data.put("currentLat", lastLocation.getLatitude());
+        update_data.put("currentLng", lastLocation.getLongitude());
+
+        String data = Paper.book().read(Common.TRIP_START);
+        if (!TextUtils.isEmpty(data)) {
+            ShippingOrderModel shippingOrderModel = new Gson().fromJson(data, new TypeToken<ShippingOrderModel>(){}.getType());
+            if (shippingOrderModel != null) {
+                FirebaseDatabase.getInstance().getReference(Common.SHIPPING_ORDER_REF)
+                        .child(shippingOrderModel.getKey())
+                        .updateChildren(update_data)
+                        .addOnFailureListener(e -> Toast.makeText(ShippingActivity.this, ""+e.getMessage(), Toast.LENGTH_SHORT).show());
+            }
+        } else {
+            Toast.makeText(this, "Please start your trip", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void moveMarkerAnimation(Marker marker, String from, String to) {
