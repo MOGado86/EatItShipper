@@ -150,12 +150,12 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
     private Polyline yellowPolyline;
 
 
+    @SuppressLint("NonConstantResourceId")
     @OnClick(R.id.btn_show)
     void onShowClick() {
         if (expandable_layout.isExpanded()) {
             btn_show.setText("SHOW");
-        }
-        else {
+        } else {
             btn_show.setText("HIDE");
         }
         expandable_layout.toggle();
@@ -173,7 +173,21 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
         Paper.book().write(Common.TRIP_START, data);
         btn_start_trip.setEnabled(false);
 
-        drawRoutes(data);
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        fusedLocationProviderClient.getLastLocation()
+                .addOnSuccessListener(location -> {
+                    Map<String, Object> update_data = new HashMap<>();
+                    update_data.put("currentLat", location.getLatitude());
+                    update_data.put("currentLng", location.getLongitude());
+                    FirebaseDatabase.getInstance().getReference(Common.SHIPPING_ORDER_REF)
+                            .child(shippingOrderModel.getKey())
+                            .updateChildren(update_data)
+                            .addOnFailureListener(e -> Toast.makeText(ShippingActivity.this, "" + e.getMessage(), Toast.LENGTH_SHORT).show())
+                            .addOnSuccessListener(aVoid -> drawRoutes(data));
+                }).addOnFailureListener(e -> Toast.makeText(ShippingActivity.this, "" + e.getMessage(), Toast.LENGTH_SHORT).show());
+
     }
 
     @Override
@@ -228,7 +242,7 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
         places_fragment.setOnPlaceSelectedListener(new PlaceSelectionListener() {
             @Override
             public void onPlaceSelected(@NonNull Place place) {
-               drawRoutes(place);
+                drawRoutes(place);
 
             }
 
@@ -287,7 +301,8 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
     }
 
     private void drawRoutes(String data) {
-        ShippingOrderModel shippingOrderModel = new Gson().fromJson(data, new TypeToken<ShippingOrderModel>() {}.getType());
+        ShippingOrderModel shippingOrderModel = new Gson().fromJson(data, new TypeToken<ShippingOrderModel>() {
+        }.getType());
 
         //Add Box
         mMap.addMarker(new MarkerOptions().icon(BitmapDescriptorFactory.fromResource(R.drawable.box))
@@ -434,12 +449,13 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
 
         String data = Paper.book().read(Common.TRIP_START);
         if (!TextUtils.isEmpty(data)) {
-            ShippingOrderModel shippingOrderModel = new Gson().fromJson(data, new TypeToken<ShippingOrderModel>(){}.getType());
+            ShippingOrderModel shippingOrderModel = new Gson().fromJson(data, new TypeToken<ShippingOrderModel>() {
+            }.getType());
             if (shippingOrderModel != null) {
                 FirebaseDatabase.getInstance().getReference(Common.SHIPPING_ORDER_REF)
                         .child(shippingOrderModel.getKey())
                         .updateChildren(update_data)
-                        .addOnFailureListener(e -> Toast.makeText(ShippingActivity.this, ""+e.getMessage(), Toast.LENGTH_SHORT).show());
+                        .addOnFailureListener(e -> Toast.makeText(ShippingActivity.this, "" + e.getMessage(), Toast.LENGTH_SHORT).show());
             }
         } else {
             Toast.makeText(this, "Please start your trip", Toast.LENGTH_SHORT).show();
