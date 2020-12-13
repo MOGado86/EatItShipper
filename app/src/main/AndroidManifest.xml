@@ -9,6 +9,7 @@
     -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.CALL_PHONE"/>
 
     <application
         android:allowBackup="true"
@@ -32,7 +33,7 @@
 
         <activity
             android:name=".ShippingActivity"
-            android:label="@string/title_activity_shipping"></activity>
+            android:label="@string/title_activity_shipping"/>
         <activity
             android:name=".HomeActivity"
             android:label="@string/title_activity_home"

@@ -5,6 +5,7 @@ public class ShippingOrderModel {
     private double currentLat, currentLng;
     private OrderModel orderModel;
     private boolean isStartTrip;
+    private String estimateTime;
 
     public ShippingOrderModel() {
     }
@@ -63,6 +64,14 @@ public class ShippingOrderModel {
 
     public void setStartTrip(boolean startTrip) {
         isStartTrip = startTrip;
+    }
+
+    public String getEstimateTime() {
+        return estimateTime;
+    }
+
+    public void setEstimateTime(String estimateTime) {
+        this.estimateTime = estimateTime;
     }
 }
 
