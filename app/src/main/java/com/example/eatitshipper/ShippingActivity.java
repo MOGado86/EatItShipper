@@ -211,37 +211,37 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
             return;
         }
         fusedLocationProviderClient.getLastLocation()
-                .addOnSuccessListener(location -> {
-                    compositeDisposable.add(iGoogleApi.getDirections("driving", "less_driving",
-                            Common.buildLocationString(location),
-                            shippingOrderModel.getOrderModel().getLat() +
-                                    "," +
-                                    shippingOrderModel.getOrderModel().getLng(), getString(R.string.google_maps_key))
-                            .subscribeOn(Schedulers.io())
-                            .observeOn(AndroidSchedulers.mainThread())
-                            .subscribe(s -> {
-                                String estimateTime = "UNKNOWN";
-                                JSONObject jsonObject = new JSONObject(s);
-                                JSONArray routes = jsonObject.getJSONArray("routes");
-                                JSONObject object = routes.getJSONObject(0);
-                                JSONArray legs = object.getJSONArray("legs");
-                                JSONObject legsObject = legs.getJSONObject(0);
+                .addOnSuccessListener(location -> compositeDisposable.add(iGoogleApi.getDirections("driving", "less_driving",
+                        Common.buildLocationString(location),
+                        shippingOrderModel.getOrderModel().getLat() +
+                                "," +
+                                shippingOrderModel.getOrderModel().getLng(), getString(R.string.google_maps_key))
+                        .subscribeOn(Schedulers.io())
+                        .observeOn(AndroidSchedulers.mainThread())
+                        .subscribe(s -> {
+                            String estimateTime = "UNKNOWN";
+                            JSONObject jsonObject = new JSONObject(s);
+                            JSONArray routes = jsonObject.getJSONArray("routes");
+                            JSONObject object = routes.getJSONObject(0);
+                            JSONArray legs = object.getJSONArray("legs");
+                            JSONObject legsObject = legs.getJSONObject(0);
 
-                                JSONObject time = legsObject.getJSONObject("duration");
-                                estimateTime = time.getString("text");
+                            JSONObject time = legsObject.getJSONObject("duration");
+                            estimateTime = time.getString("text");
 
-                                Map<String, Object> update_data = new HashMap<>();
-                                update_data.put("currentLat", location.getLatitude());
-                                update_data.put("currentLng", location.getLongitude());
-                                update_data.put("estimateTime", estimateTime);
-                                FirebaseDatabase.getInstance().getReference(Common.SHIPPING_ORDER_REF)
-                                        .child(shippingOrderModel.getKey())
-                                        .updateChildren(update_data)
-                                        .addOnFailureListener(e -> Toast.makeText(ShippingActivity.this, "" + e.getMessage(), Toast.LENGTH_SHORT).show())
-                                        .addOnSuccessListener(aVoid -> drawRoutes(data));
+                            Map<String, Object> update_data = new HashMap<>();
+                            update_data.put("currentLat", location.getLatitude());
+                            update_data.put("currentLng", location.getLongitude());
+                            update_data.put("estimateTime", estimateTime);
+                            FirebaseDatabase.getInstance().getReference(Common.RESTAURANT_REF)
+                                    .child(Common.currentRestaurant.getUid())
+                                    .child(Common.SHIPPING_ORDER_REF)
+                                    .child(shippingOrderModel.getKey())
+                                    .updateChildren(update_data)
+                                    .addOnFailureListener(e -> Toast.makeText(ShippingActivity.this, "" + e.getMessage(), Toast.LENGTH_SHORT).show())
+                                    .addOnSuccessListener(aVoid -> drawRoutes(data));
 
-                            }, throwable -> Toast.makeText(ShippingActivity.this, throwable.getMessage(), Toast.LENGTH_SHORT).show()));
-                }).addOnFailureListener(e -> Toast.makeText(ShippingActivity.this, "" + e.getMessage(), Toast.LENGTH_SHORT).show());
+                        }, throwable -> Toast.makeText(ShippingActivity.this, throwable.getMessage(), Toast.LENGTH_SHORT).show()))).addOnFailureListener(e -> Toast.makeText(ShippingActivity.this, "" + e.getMessage(), Toast.LENGTH_SHORT).show());
 
     }
 
@@ -526,7 +526,9 @@ public class ShippingActivity extends FragmentActivity implements OnMapReadyCall
                             update_data.put("currentLat", lastLocation.getLatitude());
                             update_data.put("currentLng", lastLocation.getLongitude());
                             update_data.put("estimateTime", estimateTime);
-                            FirebaseDatabase.getInstance().getReference(Common.SHIPPING_ORDER_REF)
+                            FirebaseDatabase.getInstance().getReference(Common.RESTAURANT_REF)
+                                    .child(Common.currentRestaurant.getUid())
+                                    .child(Common.SHIPPING_ORDER_REF)
                                     .child(shippingOrderModel.getKey())
                                     .updateChildren(update_data)
                                     .addOnFailureListener(e -> Toast.makeText(ShippingActivity.this, "" + e.getMessage(), Toast.LENGTH_SHORT).show());
