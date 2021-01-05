@@ -15,6 +15,7 @@ import android.widget.EditText;
 import android.widget.Toast;
 
 import com.example.eatitshipper.Common.Common;
+import com.example.eatitshipper.Model.RestaurantModel;
 import com.example.eatitshipper.Model.ShipperUserModel;
 import com.firebase.ui.auth.AuthUI;
 import com.firebase.ui.auth.IdpResponse;
@@ -26,6 +27,8 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 import java.util.Arrays;
 import java.util.List;
@@ -81,7 +84,17 @@ public class MainActivity extends AppCompatActivity {
             FirebaseUser user = firebaseAuthLocal.getCurrentUser();
             if (user != null) {
                 //Already Login
-                checkServerUserFromFirebase(user);
+                Paper.init(this);
+                String jsonEncode = Paper.book().read(Common.RESTAURANT_SAVE);
+                RestaurantModel restaurantModel = new Gson().fromJson(jsonEncode,
+                        new TypeToken<RestaurantModel>(){}.getType());
+
+                if (restaurantModel != null) {
+                    checkServerUserFromFirebase(user, restaurantModel);
+                } else {
+                    startActivity(new Intent(MainActivity.this, RestaurantListActivity.class));
+                    finish();
+                }
 
             } else {
                 phoneLogin();
@@ -89,34 +102,44 @@ public class MainActivity extends AppCompatActivity {
         };
     }
 
-    private void checkServerUserFromFirebase(FirebaseUser user) {
+    private void checkServerUserFromFirebase(FirebaseUser user, RestaurantModel restaurantModel) {
         dialog.show();
-        serverRef.child(user.getUid()).addListenerForSingleValueEvent(new ValueEventListener() {
-            @Override
-            public void onDataChange(@NonNull DataSnapshot snapshot) {
-                if (snapshot.exists()) {
-                    ShipperUserModel userModel = snapshot.getValue(ShipperUserModel.class);
-                    if (userModel.isActive()) {
-                        goToHomeActivity(userModel);
-                    } else {
-                        dialog.dismiss();
-                        Toast.makeText(MainActivity.this, "You must be marked active by admin to use the app", Toast.LENGTH_SHORT).show();
+
+        serverRef = FirebaseDatabase.getInstance().getReference(Common.RESTAURANT_REF)
+                .child(restaurantModel.getUid())
+                .child(Common.SHIPPER_REF);
+        serverRef.child(user.getUid())
+                .addListenerForSingleValueEvent(new ValueEventListener() {
+                    @Override
+                    public void onDataChange(@NonNull DataSnapshot snapshot) {
+                        if (snapshot.exists()) {
+                            ShipperUserModel userModel = snapshot.getValue(ShipperUserModel.class);
+                            if (userModel.isActive()) {
+                                goToHomeActivity(userModel, restaurantModel);
+                            } else {
+                                Toast.makeText(MainActivity.this, "You must be enabled from server app", Toast.LENGTH_SHORT).show();
+                            }
+                        }
                     }
 
-                } else {
-                    showRegisterDialog(user);
-                    dialog.dismiss();
+                    @Override
+                    public void onCancelled(@NonNull DatabaseError error) {
+                        Toast.makeText(MainActivity.this, error.getMessage(), Toast.LENGTH_SHORT).show();
 
-                }
-            }
-
-            @Override
-            public void onCancelled(@NonNull DatabaseError error) {
-                dialog.dismiss();
-                Log.e(TAG, "onCancelled: " + error);
-            }
-        });
+                    }
+                });
     }
+
+    private void goToHomeActivity(ShipperUserModel userModel, RestaurantModel restaurantModel) {
+        dialog.dismiss();
+        Common.currentShipperUser = userModel;
+        Common.currentRestaurant = restaurantModel;
+        startActivity(new Intent(MainActivity.this, HomeActivity.class));
+        finish();
+
+    }
+
+
 
     private void phoneLogin() {
         startActivityForResult(AuthUI.getInstance().
@@ -136,70 +159,4 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
-    private void showRegisterDialog(FirebaseUser user) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Register");
-        builder.setMessage("Please fill information");
-        builder.setCancelable(false);
-
-        View itemView = LayoutInflater.from(this).inflate(R.layout.layout_register, null);
-        TextInputLayout phone_input_layout = itemView.findViewById(R.id.phone_input_layout);
-        EditText edt_name = itemView.findViewById(R.id.edt_name);
-        EditText edt_phone = itemView.findViewById(R.id.edt_phone);
-
-        //set Data
-        if (user.getPhoneNumber() == null || TextUtils.isEmpty(user.getPhoneNumber())) {
-            phone_input_layout.setHint("Email");
-            edt_phone.setText(user.getEmail());
-            edt_name.setText(user.getDisplayName());
-        }
-        else
-            edt_phone.setText(user.getPhoneNumber());
-
-        builder.setNegativeButton("CANCEL", (dialogInterface, i) -> dialogInterface.dismiss());
-        builder.setPositiveButton("REGISTER", (dialogInterface, i) -> {
-            if (TextUtils.isEmpty(edt_name.getText().toString())) {
-                Toast.makeText(this, "Please enter your name", Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-
-            ShipperUserModel shipperUserModel = new ShipperUserModel();
-            shipperUserModel.setUid(user.getUid());
-            shipperUserModel.setName(edt_name.getText().toString());
-            shipperUserModel.setPhone(edt_phone.getText().toString());
-            shipperUserModel.setActive(false);
-
-            dialog.show();
-
-            serverRef.child(shipperUserModel.getUid()).setValue(shipperUserModel)
-                    .addOnFailureListener(e -> {
-                        dialog.dismiss();
-                        Toast.makeText(MainActivity.this, "" + e.getMessage(), Toast.LENGTH_SHORT).show();
-                    }).addOnCompleteListener(task -> {
-                if (task.isSuccessful()) {
-                    dialog.dismiss();
-                    Toast.makeText(MainActivity.this, "Registration successful, admin will contact you active soon", Toast.LENGTH_SHORT).show();
-                    //goToHomeActivity(serverUserModel);
-
-
-                }
-            });
-
-
-        });
-
-        builder.setView(itemView);
-        AlertDialog registerDialog = builder.create();
-        registerDialog.show();
-
-    }
-
-    private void goToHomeActivity(ShipperUserModel shipperUserModel) {
-        dialog.dismiss();
-        Common.currentShipperUser = shipperUserModel;
-        startActivity(new Intent(MainActivity.this, HomeActivity.class));
-        finish();
-    }
-
 }

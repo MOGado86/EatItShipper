@@ -21,6 +21,7 @@ import android.widget.Toast;
 
 import androidx.core.app.NotificationCompat;
 
+import com.example.eatitshipper.Model.RestaurantModel;
 import com.example.eatitshipper.Model.ShipperUserModel;
 import com.example.eatitshipper.Model.TokenModel;
 import com.example.eatitshipper.R;
@@ -42,8 +43,11 @@ public class Common {
     public static final String SHIPPING_ORDER_REF = "ShippingOrder";
     public static final String SHIPPING_ORDER_DATA = "ShippingData";
     public static final String TRIP_START = "Trip";
+    public static final String RESTAURANT_REF = "Restaurant";
+    public static final String RESTAURANT_SAVE = "RESTAURANT_SAVE";
 
     public static ShipperUserModel currentShipperUser;
+    public static RestaurantModel currentRestaurant;
 
 
     public static void setSpanString(String welcome, String name, TextView textView) {
